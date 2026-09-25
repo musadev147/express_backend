@@ -110,11 +110,13 @@ def get_agora_config(channelName: Optional[str] = "express_call"):
     return ApiResponse(
         success=True,
         statusCode=200,
-        message="Agora RTC configuration fetched",
+        message="Agora RTC & Chat configuration fetched",
         data=AgoraConfigResponse(
             appId=settings.AGORA_APP_ID,
             token=settings.AGORA_TEMP_TOKEN,
-            channelName=channelName or "express_call"
+            channelName=channelName or "express_call",
+            chatWsUrl=settings.AGORA_CHAT_WS_URL,
+            chatRestUrl=settings.AGORA_CHAT_REST_URL
         )
     )
 

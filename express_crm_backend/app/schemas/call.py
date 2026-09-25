@@ -22,6 +22,8 @@ class AgoraConfigResponse(BaseModel):
     appId: str
     token: str
     channelName: str
+    chatWsUrl: Optional[str] = "msync-api-61.chat.agora.io"
+    chatRestUrl: Optional[str] = "a61.chat.agora.io"
 
 
 class CallEndRequest(BaseModel):
