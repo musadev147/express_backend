@@ -1,11 +1,13 @@
-from typing import List, Optional
+from typing import List, Optional, Any
 from pydantic import BaseModel
 
 class OrderItemInput(BaseModel):
+    id: Optional[Any] = None # can be passed as "1" or 1
     productId: Optional[int] = None
     name: Optional[str] = None
     price: Optional[float] = None
     qty: int = 1
+
 
 class InvoiceCreateRequest(BaseModel):
     customerPhone: str
@@ -54,3 +56,11 @@ class InvoiceResponse(BaseModel):
     pdfDownloadUrl: Optional[str] = None
     vendorWalletDeduction: Optional[float] = None
     vendorUpdatedWalletBalance: Optional[float] = None
+
+class InvoiceStatusUpdateRequest(BaseModel):
+    status: str # pending, confirmed, completed, cancelled, delivered
+    note: Optional[str] = None
+
+class InvoiceCancelRequest(BaseModel):
+    reason: Optional[str] = "Customer request / cancellation"
+

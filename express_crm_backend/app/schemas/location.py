@@ -52,3 +52,11 @@ class CreateAreaRequest(BaseModel):
     name: str
     latitude: Optional[float] = None
     longitude: Optional[float] = None
+
+class SimpleLocationItem(BaseModel):
+    id: int
+    name: str
+    parentId: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+

@@ -39,12 +39,16 @@ class CommissionService:
 
         for item_in in items_input:
             product = None
-            if item_in.productId:
-                product = db.query(Product).filter(Product.id == item_in.productId).first()
+            prod_id = item_in.productId if item_in.productId is not None else item_in.id
+            if prod_id is not None:
+                try:
+                    product = db.query(Product).filter(Product.id == int(prod_id)).first()
+                except (ValueError, TypeError):
+                    product = None
 
             if product:
-                item_name = product.name
-                item_price = float(product.price)
+                item_name = item_in.name or product.name
+                item_price = float(item_in.price) if item_in.price is not None else float(product.price)
                 category_id = product.category_id
                 category_name = product.category or "General"
                 
@@ -56,6 +60,7 @@ class CommissionService:
                 category_id = None
                 category_name = "General"
                 comm_rate = float(settings.DEFAULT_COMMISSION_RATE) # 2.00%
+
 
             qty = max(1, item_in.qty)
             line_total = round(item_price * qty, 2)

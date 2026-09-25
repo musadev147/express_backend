@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -9,12 +9,17 @@ from app.models.product import Product
 from app.models.category import Category
 from app.models.invoice import Invoice
 from app.models.search_request import SearchRequest
+from app.models.payout import PayoutRequest, VendorWalletLedger
+from app.models.support_ticket import SupportTicket, TicketReply
 from app.schemas.common import ApiResponse
 from app.schemas.product import (
     ProductCreateRequest, ProductUpdateRequest, ProductToggleStockRequest, ProductResponse
 )
 from app.schemas.search_request import SearchDemandItem
+from app.schemas.payout import PayoutCreateRequest, PayoutResponse, VendorWalletLedgerResponse
+from app.schemas.support_ticket import CreateTicketRequest, TicketDetailResponse
 from app.services.auth_service import get_current_user, require_roles
+
 
 router = APIRouter(prefix="/vendor", tags=["Vendor Shop & Inventory"])
 
@@ -236,3 +241,259 @@ def get_area_search_requests(vendor: Vendor = Depends(get_current_vendor), db: S
         message="Area search requests fetched",
         data=result
     )
+
+@router.post("/payouts/request", response_model=ApiResponse[dict], status_code=201)
+def request_payout(
+    request: PayoutCreateRequest,
+    vendor: Vendor = Depends(get_current_vendor),
+    db: Session = Depends(get_db)
+):
+    if request.amount <= 0:
+        raise HTTPException(status_code=400, detail="Payout amount must be greater than zero")
+    if vendor.wallet_balance < request.amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Insufficient wallet balance. Current: ৳{vendor.wallet_balance:.2f}, Requested: ৳{request.amount:.2f}"
+        )
+
+    # Debit vendor wallet immediately and record pending payout
+    current_balance = float(vendor.wallet_balance)
+    new_balance = round(current_balance - request.amount, 2)
+    vendor.wallet_balance = new_balance
+
+    payout = PayoutRequest(
+        vendor_id=vendor.id,
+        amount=request.amount,
+        payment_method=request.paymentMethod,
+        account_number=request.accountNumber,
+        status="pending",
+        admin_note=request.adminNote
+    )
+    db.add(payout)
+    db.commit()
+    db.refresh(payout)
+
+    ledger_entry = VendorWalletLedger(
+        vendor_id=vendor.id,
+        invoice_id=None,
+        transaction_type="payout_debit",
+        amount=request.amount,
+        balance_before=current_balance,
+        balance_after=new_balance,
+        description=f"Withdrawal request #{payout.id} via {request.paymentMethod} ({request.accountNumber})"
+    )
+    db.add(ledger_entry)
+    db.commit()
+
+    return ApiResponse(
+        success=True,
+        statusCode=201,
+        message="Payout request submitted successfully",
+        data={
+            "payoutId": payout.id,
+            "amount": payout.amount,
+            "status": payout.status,
+            "updatedWalletBalance": vendor.wallet_balance
+        }
+    )
+
+@router.get("/payouts", response_model=ApiResponse[List[PayoutResponse]])
+def get_vendor_payouts(vendor: Vendor = Depends(get_current_vendor), db: Session = Depends(get_db)):
+    payouts = db.query(PayoutRequest).filter(PayoutRequest.vendor_id == vendor.id).order_by(PayoutRequest.created_at.desc()).all()
+    result = [
+        PayoutResponse(
+            id=p.id,
+            vendorId=p.vendor_id,
+            vendorShop=vendor.shop_name,
+            amount=p.amount,
+            paymentMethod=p.payment_method,
+            accountNumber=p.account_number,
+            status=p.status,
+            transactionRef=p.transaction_ref,
+            adminNote=p.admin_note,
+            createdAt=p.created_at.isoformat() if p.created_at else "",
+            processedAt=p.processed_at.isoformat() if p.processed_at else None
+        )
+        for p in payouts
+    ]
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Vendor payouts history fetched",
+        data=result
+    )
+
+@router.get("/wallet-ledger", response_model=ApiResponse[List[VendorWalletLedgerResponse]])
+def get_vendor_wallet_ledger(vendor: Vendor = Depends(get_current_vendor), db: Session = Depends(get_db)):
+    ledgers = db.query(VendorWalletLedger).filter(
+        VendorWalletLedger.vendor_id == vendor.id
+    ).order_by(VendorWalletLedger.created_at.desc()).all()
+
+    result = [
+        VendorWalletLedgerResponse(
+            id=l.id,
+            vendorId=l.vendor_id,
+            invoiceId=l.invoice_id,
+            transactionType=l.transaction_type,
+            amount=l.amount,
+            balanceBefore=l.balance_before,
+            balanceAfter=l.balance_after,
+            description=l.description,
+            createdAt=l.created_at.isoformat() if l.created_at else ""
+        )
+        for l in ledgers
+    ]
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Vendor wallet ledger history fetched",
+        data=result
+    )
+
+@router.get("/invoices", response_model=ApiResponse[List[dict]])
+def get_vendor_invoices(
+    status: Optional[str] = None,
+    vendor: Vendor = Depends(get_current_vendor),
+    db: Session = Depends(get_db)
+):
+    q = db.query(Invoice).filter(Invoice.vendor_id == vendor.id)
+    if status:
+        q = q.filter(Invoice.status == status)
+    invoices = q.order_by(Invoice.created_at.desc()).all()
+
+    result = [
+        {
+            "id": inv.id,
+            "customerName": inv.customer_name,
+            "customerPhone": inv.customer_phone,
+            "subtotal": inv.subtotal,
+            "discount": inv.discount,
+            "commissionAmount": inv.commission_amount,
+            "total": inv.total,
+            "status": inv.status,
+            "paymentMethod": inv.payment_method,
+            "createdAt": inv.created_at.isoformat() if inv.created_at else ""
+        }
+        for inv in invoices
+    ]
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Vendor invoices fetched successfully",
+        data=result
+    )
+
+@router.get("/profile", response_model=ApiResponse[dict])
+def get_vendor_profile(vendor: Vendor = Depends(get_current_vendor)):
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Vendor profile fetched",
+        data={
+            "id": vendor.id,
+            "userId": vendor.user_id,
+            "shopName": vendor.shop_name,
+            "ownerName": vendor.user.name if vendor.user else "",
+            "phone": vendor.user.phone if vendor.user else "",
+            "email": vendor.user.email if vendor.user else "",
+            "category": vendor.category,
+            "address": vendor.address,
+            "division": vendor.division_name,
+            "district": vendor.district_name,
+            "upazila": vendor.upazila_name,
+            "area": vendor.area_name,
+            "walletBalance": vendor.wallet_balance,
+            "commissionRate": vendor.commission_rate,
+            "isVerified": vendor.is_verified,
+            "nidNumber": vendor.nid_number,
+            "tradeLicense": vendor.trade_license,
+            "rating": vendor.rating
+        }
+    )
+
+@router.put("/profile", response_model=ApiResponse[dict])
+def update_vendor_profile(
+    request: dict,
+    vendor: Vendor = Depends(get_current_vendor),
+    db: Session = Depends(get_db)
+):
+    if "shopName" in request:
+        vendor.shop_name = request["shopName"]
+    if "address" in request:
+        vendor.address = request["address"]
+    if "nidNumber" in request:
+        vendor.nid_number = request["nidNumber"]
+    if "tradeLicense" in request:
+        vendor.trade_license = request["tradeLicense"]
+    if "category" in request:
+        vendor.category = request["category"]
+
+    db.commit()
+    db.refresh(vendor)
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Vendor profile updated successfully",
+        data={
+            "id": vendor.id,
+            "shopName": vendor.shop_name,
+            "address": vendor.address,
+            "nidNumber": vendor.nid_number,
+            "tradeLicense": vendor.trade_license
+        }
+    )
+
+@router.post("/support-tickets", response_model=ApiResponse[dict], status_code=201)
+def create_vendor_ticket(
+    request: CreateTicketRequest,
+    vendor: Vendor = Depends(get_current_vendor),
+    db: Session = Depends(get_db)
+):
+    ticket_num = f"TCK-{int(datetime.utcnow().timestamp()) % 100000}"
+    ticket = SupportTicket(
+        ticket_number=ticket_num,
+        creator_id=vendor.user_id,
+        subject=request.subject,
+        description=request.description,
+        category=request.category,
+        priority=request.priority,
+        status="open"
+    )
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+
+    return ApiResponse(
+        success=True,
+        statusCode=201,
+        message="Support ticket created successfully",
+        data={"ticketId": ticket.id, "ticketNumber": ticket.ticket_number, "status": ticket.status}
+    )
+
+@router.get("/support-tickets", response_model=ApiResponse[List[dict]])
+def get_vendor_tickets(vendor: Vendor = Depends(get_current_vendor), db: Session = Depends(get_db)):
+    tickets = db.query(SupportTicket).filter(
+        SupportTicket.creator_id == vendor.user_id
+    ).order_by(SupportTicket.created_at.desc()).all()
+
+    result = [
+        {
+            "id": t.id,
+            "ticketNumber": t.ticket_number,
+            "subject": t.subject,
+            "description": t.description,
+            "category": t.category,
+            "status": t.status,
+            "priority": t.priority,
+            "createdAt": t.created_at.isoformat() if t.created_at else ""
+        }
+        for t in tickets
+    ]
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Vendor support tickets fetched",
+        data=result
+    )
+

@@ -3,16 +3,20 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, UserRole
 from app.models.vendor import Vendor
 from app.models.product import Product
 from app.models.category import Category
 from app.models.search_request import SearchRequest
+from app.models.support_ticket import SupportTicket, TicketReply
 from app.schemas.common import ApiResponse, Meta
 from app.schemas.product import ProductResponse, VendorMarketplaceItem
-from app.schemas.search_request import SearchDemandCreateRequest, SearchDemandCreateResponse
-from app.services.auth_service import get_optional_user
+from app.schemas.category import CategoryResponse
+from app.schemas.support_ticket import CreateTicketRequest, TicketDetailResponse
+from app.schemas.search_request import SearchDemandCreateRequest, SearchDemandCreateResponse, SearchDemandItem
+from app.services.auth_service import get_optional_user, get_current_user
 from app.services.websocket_manager import ws_manager
+
 
 router = APIRouter(prefix="/customer", tags=["Customer Marketplace & Discovery"])
 
@@ -174,3 +178,177 @@ async def create_search_demand_request(
             vendorsNotifiedCount=max(1, vendors_in_area)
         )
     )
+
+@router.get("/categories", response_model=ApiResponse[List[CategoryResponse]])
+def get_customer_categories(db: Session = Depends(get_db)):
+    categories = db.query(Category).filter(Category.is_active == True).all()
+    result = []
+    for cat in categories:
+        prod_count = db.query(Product).filter(Product.category_id == cat.id, Product.is_available == True).count()
+        result.append(
+            CategoryResponse(
+                id=cat.id,
+                name=cat.name,
+                slug=cat.slug,
+                commissionRate=cat.commission_rate,
+                iconUrl=cat.icon_url,
+                isActive=cat.is_active,
+                totalProducts=prod_count,
+                totalRevenueEarned=0.0
+            )
+        )
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Categories fetched successfully",
+        data=result
+    )
+
+@router.get("/vendors/{vendor_id}", response_model=ApiResponse[dict])
+def get_vendor_detail(vendor_id: int, db: Session = Depends(get_db)):
+    v = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+
+    products = db.query(Product).filter(Product.vendor_id == v.id, Product.is_available == True).all()
+    
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Vendor details fetched",
+        data={
+            "id": v.id,
+            "shopName": v.shop_name,
+            "ownerName": v.user.name if v.user else "",
+            "phone": v.user.phone if v.user else "",
+            "category": v.category,
+            "address": v.address,
+            "area": v.area_name or "Kaliganj Bazar",
+            "rating": v.rating,
+            "isVerified": v.is_verified,
+            "productCount": len(products),
+            "products": [format_product_response(p, v.commission_rate) for p in products]
+        }
+    )
+
+@router.get("/products/{product_id}", response_model=ApiResponse[ProductResponse])
+def get_product_detail(product_id: int, db: Session = Depends(get_db)):
+    prod = db.query(Product).filter(Product.id == product_id).first()
+    if not prod:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    comm_rate = prod.category_rel.commission_rate if prod.category_rel else 2.00
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Product detail fetched",
+        data=format_product_response(prod, comm_rate)
+    )
+
+@router.get("/search-requests/my", response_model=ApiResponse[List[SearchDemandItem]])
+def get_my_search_requests(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    reqs = db.query(SearchRequest).filter(
+        (SearchRequest.customer_id == current_user.id) |
+        (SearchRequest.customer_phone == current_user.phone)
+    ).order_by(SearchRequest.created_at.desc()).all()
+
+    result = [
+        SearchDemandItem(
+            id=r.id,
+            product=r.query_text,
+            area=r.area_name,
+            customerPhone=r.customer_phone,
+            time=r.created_at.isoformat() if r.created_at else "",
+            status=r.status
+        )
+        for r in reqs
+    ]
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="My search demand requests fetched",
+        data=result
+    )
+
+@router.post("/support-tickets", response_model=ApiResponse[dict], status_code=201)
+def create_customer_ticket(
+    request: CreateTicketRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    ticket_num = f"TCK-{int(time.time() * 1000) % 100000}"
+    ticket = SupportTicket(
+        ticket_number=ticket_num,
+        creator_id=current_user.id,
+        subject=request.subject,
+        description=request.description,
+        category=request.category,
+        priority=request.priority,
+        status="open"
+    )
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+
+    return ApiResponse(
+        success=True,
+        statusCode=201,
+        message="Support ticket created successfully",
+        data={"ticketId": ticket.id, "ticketNumber": ticket.ticket_number, "status": ticket.status}
+    )
+
+@router.get("/support-tickets", response_model=ApiResponse[List[dict]])
+def get_customer_tickets(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    tickets = db.query(SupportTicket).filter(
+        SupportTicket.creator_id == current_user.id
+    ).order_by(SupportTicket.created_at.desc()).all()
+
+    result = [
+        {
+            "id": t.id,
+            "ticketNumber": t.ticket_number,
+            "subject": t.subject,
+            "description": t.description,
+            "category": t.category,
+            "status": t.status,
+            "priority": t.priority,
+            "createdAt": t.created_at.isoformat() if t.created_at else ""
+        }
+        for t in tickets
+    ]
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Customer support tickets fetched",
+        data=result
+    )
+
+@router.post("/vendors/{vendor_id}/reviews", response_model=ApiResponse[dict], status_code=201)
+def submit_vendor_review(
+    vendor_id: int,
+    rating: float = Query(5.0, ge=1.0, le=5.0),
+    review: Optional[str] = Query(None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    v = db.query(Vendor).filter(Vendor.id == vendor_id).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Vendor not found")
+    
+    # Update running average rating
+    v.rating = round((float(v.rating or 5.0) * 4.0 + rating) / 5.0, 1)
+    db.commit()
+
+    return ApiResponse(
+        success=True,
+        statusCode=201,
+        message="Review submitted successfully",
+        data={"vendorId": v.id, "newRating": v.rating}
+    )
+

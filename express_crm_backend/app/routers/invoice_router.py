@@ -7,9 +7,11 @@ from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.vendor import Vendor
 from app.models.invoice import Invoice, InvoiceItem
+from app.models.payout import VendorWalletLedger
 from app.schemas.common import ApiResponse
-from app.schemas.invoice import InvoiceCreateRequest, InvoiceResponse, InvoiceItemDetail
+from app.schemas.invoice import InvoiceCreateRequest, InvoiceResponse, InvoiceItemDetail, InvoiceStatusUpdateRequest, InvoiceCancelRequest
 from app.services.auth_service import get_current_user, get_optional_user
+
 from app.services.commission_service import CommissionService
 from app.services.websocket_manager import ws_manager
 
@@ -174,6 +176,129 @@ def get_invoices(
         message="Invoices fetched successfully",
         data=result
     )
+
+@router.get("/my-invoices", response_model=ApiResponse[List[InvoiceResponse]])
+def get_my_invoices_alias(
+    status: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    query = db.query(Invoice)
+    if current_user.role == UserRole.CUSTOMER.value:
+        query = query.filter(
+            (Invoice.customer_id == current_user.id) |
+            (Invoice.customer_phone == current_user.phone)
+        )
+    elif current_user.role == UserRole.VENDOR.value:
+        vendor = db.query(Vendor).filter(Vendor.user_id == current_user.id).first()
+        if vendor:
+            query = query.filter(Invoice.vendor_id == vendor.id)
+
+    if status:
+        query = query.filter(Invoice.status == status)
+
+    invoices = query.order_by(Invoice.created_at.desc()).all()
+    result = [format_invoice_response(inv) for inv in invoices]
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="My invoices fetched successfully",
+        data=result
+    )
+
+@router.patch("/{id}/status", response_model=ApiResponse[InvoiceResponse])
+def update_invoice_status(
+    id: str,
+    request: InvoiceStatusUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    inv = db.query(Invoice).filter(Invoice.id == id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    old_status = inv.status
+    inv.status = request.status
+
+    # If order is marked as cancelled and was previously completed/confirmed, refund commission
+    if request.status == "cancelled" and old_status in ["completed", "confirmed"] and inv.commission_amount > 0:
+        vendor = db.query(Vendor).filter(Vendor.id == inv.vendor_id).first()
+        if vendor:
+            current_bal = float(vendor.wallet_balance or 0.0)
+            new_bal = round(current_bal + inv.commission_amount, 2)
+            vendor.wallet_balance = new_bal
+            ledger = VendorWalletLedger(
+                vendor_id=vendor.id,
+                invoice_id=inv.id,
+                transaction_type="refund_credit",
+                amount=inv.commission_amount,
+                balance_before=current_bal,
+                balance_after=new_bal,
+                description=f"Refund of 2% platform commission for cancelled order #{inv.id}"
+            )
+            db.add(ledger)
+
+    db.commit()
+    db.refresh(inv)
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message=f"Invoice status updated to '{request.status}'",
+        data=format_invoice_response(inv)
+    )
+
+@router.post("/{id}/cancel", response_model=ApiResponse[InvoiceResponse])
+def cancel_invoice(
+    id: str,
+    request: InvoiceCancelRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    inv = db.query(Invoice).filter(Invoice.id == id).first()
+    if not inv:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    if inv.status == "cancelled":
+        return ApiResponse(
+            success=True,
+            statusCode=200,
+            message="Invoice is already cancelled",
+            data=format_invoice_response(inv)
+        )
+
+    old_status = inv.status
+    inv.status = "cancelled"
+
+    # Refund 2% commission to vendor wallet
+    if inv.commission_amount > 0 and old_status != "cancelled":
+        vendor = db.query(Vendor).filter(Vendor.id == inv.vendor_id).first()
+        if vendor:
+            current_bal = float(vendor.wallet_balance or 0.0)
+            new_bal = round(current_bal + inv.commission_amount, 2)
+            vendor.wallet_balance = new_bal
+            ledger = VendorWalletLedger(
+                vendor_id=vendor.id,
+                invoice_id=inv.id,
+                transaction_type="refund_credit",
+                amount=inv.commission_amount,
+                balance_before=current_bal,
+                balance_after=new_bal,
+                description=f"Refund of 2% platform commission for cancelled order #{inv.id} ({request.reason})"
+            )
+            db.add(ledger)
+
+    db.commit()
+    db.refresh(inv)
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Invoice cancelled successfully and commission refunded to vendor wallet",
+        data=format_invoice_response(inv)
+    )
+
 
 @router.get("/{id}", response_model=ApiResponse[InvoiceResponse])
 def get_invoice_by_id(id: str, db: Session = Depends(get_db)):

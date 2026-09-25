@@ -56,6 +56,21 @@ class UserProfileResponse(BaseModel):
     walletBalance: Optional[float] = None
     isVerified: Optional[bool] = None
 
+class RefreshTokenRequest(BaseModel):
+    refreshToken: str
+
+class ChangePasswordRequest(BaseModel):
+    oldPassword: str
+    newPassword: str
+
+class ForgotPasswordRequest(BaseModel):
+    phone: str
+
+class ResetPasswordRequest(BaseModel):
+    phone: str
+    otp: str
+    newPassword: str
+
 class AuthResponseData(BaseModel):
     token: str
     refreshToken: str

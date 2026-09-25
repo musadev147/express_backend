@@ -21,3 +21,11 @@ class CreateCategoryRequest(BaseModel):
 class UpdateCategoryCommissionRequest(BaseModel):
     commissionRate: float # e.g. 2.00
     reason: Optional[str] = None
+
+class UpdateCategoryRequest(BaseModel):
+    name: Optional[str] = None
+    slug: Optional[str] = None
+    commissionRate: Optional[float] = None
+    iconUrl: Optional[str] = None
+    isActive: Optional[bool] = None
+

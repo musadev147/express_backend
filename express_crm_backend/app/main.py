@@ -8,6 +8,9 @@ from app.config import settings
 from app.database import engine, Base, SessionLocal
 from app.seeds.initial_seed import seed_database
 
+import os
+from starlette.staticfiles import StaticFiles
+
 # Import routers
 from app.routers.auth_router import router as auth_router
 from app.routers.location_router import router as location_router
@@ -16,10 +19,12 @@ from app.routers.vendor_router import router as vendor_router
 from app.routers.invoice_router import router as invoice_router
 from app.routers.call_router import router as call_router
 from app.routers.crm_router import router as crm_router
+from app.routers.upload_router import router as upload_router, UPLOAD_DIR
 from app.websockets.signaling import router as ws_router
 
 # Initialize database tables
 Base.metadata.create_all(bind=engine)
+
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -89,7 +94,12 @@ app.include_router(vendor_router, prefix=settings.API_PREFIX)
 app.include_router(invoice_router, prefix=settings.API_PREFIX)
 app.include_router(call_router, prefix=settings.API_PREFIX)
 app.include_router(crm_router, prefix=settings.API_PREFIX)
+app.include_router(upload_router, prefix=settings.API_PREFIX)
 app.include_router(ws_router) # WebSocket at /ws
+
+# Mount static files for media uploads
+app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
+
 
 @app.get("/", tags=["Health"])
 def health_check():

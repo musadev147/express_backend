@@ -48,3 +48,32 @@ class CategoryCommissionReportResponse(BaseModel):
     totalCommissionEarned: float
     currency: str = "BDT"
     categoryBreakdown: List[CategoryCommissionReportItem] = []
+
+class CustomerStatusUpdateRequest(BaseModel):
+    status: str # active, suspended, inactive
+    reason: Optional[str] = None
+
+class CreateStaffRequest(BaseModel):
+    name: str
+    phone: str
+    password: str
+    email: Optional[str] = None
+    role: str # area_manager, crm_operator, finance
+    division: Optional[str] = "Dhaka"
+    district: Optional[str] = "Gazipur"
+    upazila: Optional[str] = "Kaliganj"
+    area: Optional[str] = "Kaliganj Bazar"
+
+class StaffResponse(BaseModel):
+    id: int
+    name: str
+    phone: str
+    email: Optional[str] = None
+    role: str
+    status: str
+    division: Optional[str] = None
+    district: Optional[str] = None
+    upazila: Optional[str] = None
+    area: Optional[str] = None
+    createdAt: str
+

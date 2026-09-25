@@ -1,0 +1,715 @@
+{
+	"info": {
+		"_postman_id": "express-hyperlocal-api-v1",
+		"name": "Express Platform Backend API v1",
+		"description": "Complete Postman Collection for Express Hyperlocal Marketplace (Flutter Mobile & Web CRM)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Authentication & Profile",
+			"item": [
+				{
+					"name": "Login (Customer / Vendor / Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone\": \"01711111111\",\n  \"password\": \"password123\",\n  \"role\": \"vendor\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "login"]
+						}
+					}
+				},
+				{
+					"name": "Register Customer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Tareq Hasan\",\n  \"phone\": \"01812345678\",\n  \"password\": \"password123\",\n  \"division\": \"Dhaka\",\n  \"district\": \"Gazipur\",\n  \"upazila\": \"Kaliganj\",\n  \"area\": \"Kaliganj Bazar\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register-customer",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register-customer"]
+						}
+					}
+				},
+				{
+					"name": "Register Vendor",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Abdur Rahman\",\n  \"shopName\": \"Rahman Electronics\",\n  \"phone\": \"01711111111\",\n  \"email\": \"rahman@mail.com\",\n  \"password\": \"password123\",\n  \"category\": \"Electronics\",\n  \"division\": \"Dhaka\",\n  \"district\": \"Gazipur\",\n  \"upazila\": \"Kaliganj\",\n  \"area\": \"Kaliganj Bazar\",\n  \"address\": \"Kaliganj Bazar Main Road, Shop #12\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/register-vendor",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "register-vendor"]
+						}
+					}
+				},
+				{
+					"name": "Get Current User Profile (/me)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/auth/me",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "me"]
+						}
+					}
+				},
+				{
+					"name": "Update User Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Abdur Rahman Khan\",\n  \"shopName\": \"Rahman Super Electronics\",\n  \"email\": \"rahman.khan@mail.com\",\n  \"address\": \"Shop 14, Kaliganj Bazar\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/auth/profile",
+							"host": ["{{base_url}}"],
+							"path": ["auth", "profile"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "2. Location & Geofencing",
+			"item": [
+				{
+					"name": "Get Location Hierarchy Tree",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/locations/hierarchy",
+							"host": ["{{base_url}}"],
+							"path": ["locations", "hierarchy"]
+						}
+					}
+				},
+				{
+					"name": "Reverse Geocode Coordinates",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"latitude\": 23.9984,\n  \"longitude\": 90.4251\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/locations/reverse-geocode",
+							"host": ["{{base_url}}"],
+							"path": ["locations", "reverse-geocode"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Customer Discovery & Marketplace",
+			"item": [
+				{
+					"name": "Get Vendors in Area",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/customer/vendors?area=Kaliganj%20Bazar&category=Electronics&page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["customer", "vendors"],
+							"query": [
+								{ "key": "area", "value": "Kaliganj Bazar" },
+								{ "key": "category", "value": "Electronics" },
+								{ "key": "page", "value": "1" },
+								{ "key": "limit", "value": "20" }
+							]
+						}
+					}
+				},
+				{
+					"name": "Get Vendor Products",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/customer/vendors/1/products",
+							"host": ["{{base_url}}"],
+							"path": ["customer", "vendors", "1", "products"]
+						}
+					}
+				},
+				{
+					"name": "Search Products across Vendors",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/customer/products/search?query=charger&area=Kaliganj%20Bazar&page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["customer", "products", "search"],
+							"query": [
+								{ "key": "query", "value": "charger" },
+								{ "key": "area", "value": "Kaliganj Bazar" },
+								{ "key": "page", "value": "1" },
+								{ "key": "limit", "value": "20" }
+							]
+						}
+					}
+				},
+				{
+					"name": "Submit Search Request (Unfulfilled Demand)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": \"iPhone 15 Pro Max Clear Case\",\n  \"area\": \"Kaliganj Bazar\",\n  \"upazila\": \"Kaliganj\",\n  \"district\": \"Gazipur\",\n  \"division\": \"Dhaka\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/customer/search-requests",
+							"host": ["{{base_url}}"],
+							"path": ["customer", "search-requests"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Vendor Shop & Inventory",
+			"item": [
+				{
+					"name": "Get Vendor Dashboard Summary",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/vendor/dashboard-summary",
+							"host": ["{{base_url}}"],
+							"path": ["vendor", "dashboard-summary"]
+						}
+					}
+				},
+				{
+					"name": "Get Vendor Products Catalog",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/vendor/products",
+							"host": ["{{base_url}}"],
+							"path": ["vendor", "products"]
+						}
+					}
+				},
+				{
+					"name": "Add Product to Catalog",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"USB Type-C Fast Cable 65W\",\n  \"category\": \"Electronics\",\n  \"description\": \"Braided nylon high-speed charging cable\",\n  \"price\": 350.00,\n  \"stock\": 25,\n  \"unit\": \"pcs\",\n  \"isAvailable\": true,\n  \"tags\": [\"type-c\", \"cable\", \"fast charging\", \"65w\"],\n  \"imageUrl\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/vendor/products",
+							"host": ["{{base_url}}"],
+							"path": ["vendor", "products"]
+						}
+					}
+				},
+				{
+					"name": "Update Product",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"USB Type-C Fast Cable 65W (Updated)\",\n  \"category\": \"Electronics\",\n  \"description\": \"Braided nylon 2M high-speed charging cable\",\n  \"price\": 380.00,\n  \"stock\": 30,\n  \"unit\": \"pcs\",\n  \"isAvailable\": true,\n  \"tags\": [\"type-c\", \"cable\", \"65w\"],\n  \"imageUrl\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/vendor/products/1",
+							"host": ["{{base_url}}"],
+							"path": ["vendor", "products", "1"]
+						}
+					}
+				},
+				{
+					"name": "Toggle Product Stock Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"isAvailable\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/vendor/products/1/toggle-stock",
+							"host": ["{{base_url}}"],
+							"path": ["vendor", "products", "1", "toggle-stock"]
+						}
+					}
+				},
+				{
+					"name": "Delete Product",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/vendor/products/1",
+							"host": ["{{base_url}}"],
+							"path": ["vendor", "products", "1"]
+						}
+					}
+				},
+				{
+					"name": "Get Area Search Requests for Vendor",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/vendor/search-requests",
+							"host": ["{{base_url}}"],
+							"path": ["vendor", "search-requests"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "5. Invoices & Billing",
+			"item": [
+				{
+					"name": "Create Invoice",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"customerPhone\": \"01812220000\",\n  \"customerName\": \"Tareq Hasan\",\n  \"vendorPhone\": \"01711111111\",\n  \"vendorShopName\": \"Rahman Electronics\",\n  \"vendorArea\": \"Kaliganj Bazar\",\n  \"items\": [\n    {\n      \"id\": \"1\",\n      \"name\": \"Samsung Charger 25W\",\n      \"price\": 1200.00,\n      \"qty\": 1\n    },\n    {\n      \"id\": \"2\",\n      \"name\": \"USB Type-C Cable\",\n      \"price\": 250.00,\n      \"qty\": 2\n    }\n  ],\n  \"discount\": 50.00,\n  \"paymentMethod\": \"Cash on Delivery\",\n  \"callId\": \"call_172545990001\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/invoices/create",
+							"host": ["{{base_url}}"],
+							"path": ["invoices", "create"]
+						}
+					}
+				},
+				{
+					"name": "Get Invoices List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/invoices",
+							"host": ["{{base_url}}"],
+							"path": ["invoices"]
+						}
+					}
+				},
+				{
+					"name": "Get Invoice Detail",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/invoices/INV-10001",
+							"host": ["{{base_url}}"],
+							"path": ["invoices", "INV-10001"]
+						}
+					}
+				},
+				{
+					"name": "Get Invoice PDF",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/invoices/INV-10001/pdf",
+							"host": ["{{base_url}}"],
+							"path": ["invoices", "INV-10001", "pdf"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "6. Real-time Voice Call & CTI",
+			"item": [
+				{
+					"name": "Initiate In-App Call",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"receiverPhone\": \"01711111111\",\n  \"receiverName\": \"Abdur Rahman\",\n  \"receiverShopName\": \"Rahman Electronics\",\n  \"receiverArea\": \"Kaliganj Bazar\",\n  \"productName\": \"Samsung Charger 25W\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/calls/initiate",
+							"host": ["{{base_url}}"],
+							"path": ["calls", "initiate"]
+						}
+					}
+				},
+				{
+					"name": "End Call Session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"durationSeconds\": 142,\n  \"status\": \"completed\",\n  \"invoiceId\": \"INV-10001\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/calls/call_172545990001/end",
+							"host": ["{{base_url}}"],
+							"path": ["calls", "call_172545990001", "end"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "7. Web CRM Admin Portal",
+			"item": [
+				{
+					"name": "CRM Analytics Overview",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/analytics/overview",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "analytics", "overview"]
+						}
+					}
+				},
+				{
+					"name": "CRM Demand Heatmap",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/analytics/demand-heatmap",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "analytics", "demand-heatmap"]
+						}
+					}
+				},
+				{
+					"name": "CRM Get Categories",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/categories",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "categories"]
+						}
+					}
+				},
+				{
+					"name": "CRM Update Category Commission",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"commissionRate\": 2.25\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/crm/categories/1/commission",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "categories", "1", "commission"]
+						}
+					}
+				},
+				{
+					"name": "CRM Finance Commission Report",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/finance/category-commission-report",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "finance", "category-commission-report"]
+						}
+					}
+				},
+				{
+					"name": "CRM Vendors List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/vendors?page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "vendors"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "limit", "value": "20" }
+							]
+						}
+					}
+				},
+				{
+					"name": "CRM Vendor 360 View",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/vendors/1",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "vendors", "1"]
+						}
+					}
+				},
+				{
+					"name": "CRM Verify Vendor KYC",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"isVerified\": true,\n  \"commissionRate\": 2.00,\n  \"adminNote\": \"NID and Trade License verified\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/crm/vendors/1/verify-kyc",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "vendors", "1", "verify-kyc"]
+						}
+					}
+				},
+				{
+					"name": "CRM Update Vendor Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"suspended\",\n  \"reason\": \"Policy violation\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/crm/vendors/1/status",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "vendors", "1", "status"]
+						}
+					}
+				},
+				{
+					"name": "CRM Customers List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/customers?page=1&limit=20",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "customers"],
+							"query": [
+								{ "key": "page", "value": "1" },
+								{ "key": "limit", "value": "20" }
+							]
+						}
+					}
+				},
+				{
+					"name": "CRM Customer 360 View",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/customers/1",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "customers", "1"]
+						}
+					}
+				},
+				{
+					"name": "CRM Support Tickets List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/tickets?status=open",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "tickets"],
+							"query": [
+								{ "key": "status", "value": "open" }
+							]
+						}
+					}
+				},
+				{
+					"name": "CRM Reply to Ticket",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"message\": \"We are investigating your request with the vendor.\",\n  \"isInternalNote\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/crm/tickets/1/reply",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "tickets", "1", "reply"]
+						}
+					}
+				},
+				{
+					"name": "CRM Update Ticket Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"resolved\",\n  \"resolutionSummary\": \"Issue resolved with merchant\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/crm/tickets/1/status",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "tickets", "1", "status"]
+						}
+					}
+				},
+				{
+					"name": "CRM Payout Requests List",
+					"request": {
+						"method": "GET",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" }
+						],
+						"url": {
+							"raw": "{{base_url}}/crm/payouts",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "payouts"]
+						}
+					}
+				},
+				{
+					"name": "CRM Approve Payout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{ "key": "Authorization", "value": "Bearer {{token}}" },
+							{ "key": "Content-Type", "value": "application/json" }
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"transactionRef\": \"TRX-BKASH-9082341\",\n  \"adminNote\": \"Disbursed via Merchant bKash Portal\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/crm/payouts/1/approve",
+							"host": ["{{base_url}}"],
+							"path": ["crm", "payouts", "1", "approve"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000/api/v1"
+		},
+		{
+			"key": "token",
+			"value": ""
+		}
+	]
+}

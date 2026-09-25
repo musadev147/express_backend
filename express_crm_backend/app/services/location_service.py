@@ -75,3 +75,29 @@ class LocationService:
             "area": closest_area.name,
             "distanceKm": round(min_dist, 2)
         }
+
+    @staticmethod
+    def get_divisions(db: Session) -> List[Division]:
+        return db.query(Division).order_by(Division.name.asc()).all()
+
+    @staticmethod
+    def get_districts(db: Session, division_id: Optional[int] = None) -> List[District]:
+        q = db.query(District)
+        if division_id:
+            q = q.filter(District.division_id == division_id)
+        return q.order_by(District.name.asc()).all()
+
+    @staticmethod
+    def get_upazilas(db: Session, district_id: Optional[int] = None) -> List[Upazila]:
+        q = db.query(Upazila)
+        if district_id:
+            q = q.filter(Upazila.district_id == district_id)
+        return q.order_by(Upazila.name.asc()).all()
+
+    @staticmethod
+    def get_areas(db: Session, upazila_id: Optional[int] = None) -> List[Area]:
+        q = db.query(Area)
+        if upazila_id:
+            q = q.filter(Area.upazila_id == upazila_id)
+        return q.order_by(Area.name.asc()).all()
+

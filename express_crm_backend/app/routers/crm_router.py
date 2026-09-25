@@ -15,16 +15,19 @@ from app.models.support_ticket import SupportTicket, TicketReply
 from app.models.payout import PayoutRequest, VendorWalletLedger
 from app.models.location import Division, District, Upazila, Area
 from app.schemas.common import ApiResponse, Meta
-from app.schemas.category import CategoryResponse, CreateCategoryRequest, UpdateCategoryCommissionRequest
+from app.schemas.category import CategoryResponse, CreateCategoryRequest, UpdateCategoryCommissionRequest, UpdateCategoryRequest
+from app.schemas.payout import PayoutRejectRequest
 from app.schemas.crm import (
     CrmAnalyticsOverview, DemandHeatmapItem, VerifyKycRequest, VendorStatusUpdateRequest,
     TicketReplyRequest, TicketStatusUpdateRequest, PayoutApprovalRequest,
-    CategoryCommissionReportResponse, CategoryCommissionReportItem
+    CategoryCommissionReportResponse, CategoryCommissionReportItem,
+    CustomerStatusUpdateRequest, CreateStaffRequest, StaffResponse
 )
 from app.schemas.location import (
     CreateDivisionRequest, CreateDistrictRequest, CreateUpazilaRequest, CreateAreaRequest
 )
-from app.services.auth_service import get_current_user, require_roles
+from app.services.auth_service import get_current_user, require_roles, AuthService
+
 
 router = APIRouter(prefix="/crm", tags=["Web CRM Administration & 360° Management"])
 
@@ -195,7 +198,72 @@ def update_category_commission(
         )
     )
 
+@router.put("/categories/{id}", response_model=ApiResponse[CategoryResponse])
+def update_category(
+    id: int,
+    request: UpdateCategoryRequest,
+    current_user: User = Depends(crm_guard),
+    db: Session = Depends(get_db)
+):
+    cat = db.query(Category).filter(Category.id == id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    if request.name is not None:
+        cat.name = request.name
+    if request.slug is not None:
+        cat.slug = request.slug
+    if request.commissionRate is not None:
+        cat.commission_rate = request.commissionRate
+    if request.iconUrl is not None:
+        cat.icon_url = request.iconUrl
+    if request.isActive is not None:
+        cat.is_active = request.isActive
+
+    db.commit()
+    db.refresh(cat)
+
+    prod_count = db.query(Product).filter(Product.category_id == cat.id).count()
+    rev = db.query(func.sum(InvoiceItem.commission_amount)).filter(InvoiceItem.category_id == cat.id).scalar() or 0.0
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message=f"Category '{cat.name}' updated successfully",
+        data=CategoryResponse(
+            id=cat.id,
+            name=cat.name,
+            slug=cat.slug,
+            commissionRate=cat.commission_rate,
+            iconUrl=cat.icon_url,
+            isActive=cat.is_active,
+            totalProducts=prod_count,
+            totalRevenueEarned=round(rev, 2)
+        )
+    )
+
+@router.delete("/categories/{id}", response_model=ApiResponse[dict])
+def delete_category(
+    id: int,
+    current_user: User = Depends(crm_guard),
+    db: Session = Depends(get_db)
+):
+    cat = db.query(Category).filter(Category.id == id).first()
+    if not cat:
+        raise HTTPException(status_code=404, detail="Category not found")
+
+    db.delete(cat)
+    db.commit()
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message=f"Category '{cat.name}' deleted successfully",
+        data={"deletedId": id}
+    )
+
 @router.get("/finance/category-commission-report", response_model=ApiResponse[CategoryCommissionReportResponse])
+
 def get_category_commission_report(
     current_user: User = Depends(crm_guard),
     db: Session = Depends(get_db)
@@ -458,7 +526,27 @@ def get_customer_360(
         }
     )
 
+@router.patch("/customers/{id}/status", response_model=ApiResponse[dict])
+def update_customer_status(
+    id: int,
+    request: CustomerStatusUpdateRequest,
+    current_user: User = Depends(crm_guard),
+    db: Session = Depends(get_db)
+):
+    c = db.query(User).filter(User.id == id, User.role == UserRole.CUSTOMER.value).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    c.status = request.status
+    db.commit()
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message=f"Customer status updated to '{request.status}'",
+        data={"customerId": c.id, "status": c.status}
+    )
+
 # 5. Support Tickets & Disputes
+
 @router.get("/tickets", response_model=ApiResponse[List[dict]])
 def get_support_tickets(
     status: Optional[str] = Query(None),
@@ -543,7 +631,54 @@ def update_ticket_status(
         data={"ticketId": ticket.id, "status": ticket.status}
     )
 
+@router.get("/tickets/{id}", response_model=ApiResponse[dict])
+def get_ticket_detail(
+    id: int,
+    current_user: User = Depends(crm_guard),
+    db: Session = Depends(get_db)
+):
+    ticket = db.query(SupportTicket).filter(SupportTicket.id == id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket not found")
+
+    replies = db.query(TicketReply).filter(TicketReply.ticket_id == ticket.id).order_by(TicketReply.created_at.asc()).all()
+    
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Ticket detail fetched",
+        data={
+            "id": ticket.id,
+            "ticketNumber": ticket.ticket_number,
+            "creator": {
+                "id": ticket.creator.id if ticket.creator else None,
+                "name": ticket.creator.name if ticket.creator else "User",
+                "phone": ticket.creator.phone if ticket.creator else "",
+                "role": ticket.creator.role if ticket.creator else ""
+            },
+            "subject": ticket.subject,
+            "description": ticket.description,
+            "category": ticket.category,
+            "status": ticket.status,
+            "priority": ticket.priority,
+            "createdAt": ticket.created_at.isoformat() if ticket.created_at else "",
+            "replies": [
+                {
+                    "id": r.id,
+                    "senderId": r.sender_id,
+                    "senderName": r.sender.name if r.sender else "Staff",
+                    "senderRole": r.sender.role if r.sender else "",
+                    "isInternalNote": r.is_internal_note,
+                    "message": r.message,
+                    "createdAt": r.created_at.isoformat() if r.created_at else ""
+                }
+                for r in replies
+            ]
+        }
+    )
+
 # 6. Finance & Payout Approvals
+
 @router.get("/payouts", response_model=ApiResponse[List[dict]])
 def get_payout_requests(
     current_user: User = Depends(crm_guard),
@@ -595,6 +730,51 @@ def approve_payout(
         data={"payoutId": p.id, "status": "approved", "transactionRef": p.transaction_ref}
     )
 
+@router.post("/payouts/{id}/reject", response_model=ApiResponse[dict])
+def reject_payout(
+    id: int,
+    request: PayoutRejectRequest,
+    current_user: User = Depends(crm_guard),
+    db: Session = Depends(get_db)
+):
+    p = db.query(PayoutRequest).filter(PayoutRequest.id == id).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Payout request not found")
+
+    if p.status == "rejected":
+        raise HTTPException(status_code=400, detail="Payout request is already rejected")
+
+    # Restore vendor's wallet balance
+    vendor = db.query(Vendor).filter(Vendor.id == p.vendor_id).first()
+    if vendor:
+        cur_bal = float(vendor.wallet_balance or 0.0)
+        new_bal = round(cur_bal + p.amount, 2)
+        vendor.wallet_balance = new_bal
+        ledger = VendorWalletLedger(
+            vendor_id=vendor.id,
+            invoice_id=None,
+            transaction_type="refund_credit",
+            amount=p.amount,
+            balance_before=cur_bal,
+            balance_after=new_bal,
+            description=f"Refund of rejected withdrawal request #{p.id} ({request.adminNote})"
+        )
+        db.add(ledger)
+
+    p.status = "rejected"
+    p.admin_note = request.adminNote
+    p.processed_by = current_user.id
+    p.processed_at = datetime.utcnow()
+    db.commit()
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Payout request rejected and balance restored to vendor wallet",
+        data={"payoutId": p.id, "status": "rejected", "adminNote": p.admin_note}
+    )
+
+
 # 7. Master Location Management
 @router.post("/locations/division", response_model=ApiResponse[dict], status_code=201)
 def create_division(request: CreateDivisionRequest, current_user: User = Depends(crm_guard), db: Session = Depends(get_db)):
@@ -627,3 +807,260 @@ def create_area(request: CreateAreaRequest, current_user: User = Depends(crm_gua
     db.commit()
     db.refresh(ar)
     return ApiResponse(success=True, statusCode=201, message="Area created", data={"id": ar.id, "name": ar.name})
+
+@router.delete("/locations/division/{id}", response_model=ApiResponse[dict])
+def delete_division(id: int, current_user: User = Depends(crm_guard), db: Session = Depends(get_db)):
+    div = db.query(Division).filter(Division.id == id).first()
+    if not div:
+        raise HTTPException(status_code=404, detail="Division not found")
+    db.delete(div)
+    db.commit()
+    return ApiResponse(success=True, statusCode=200, message="Division deleted", data={"deletedId": id})
+
+@router.delete("/locations/district/{id}", response_model=ApiResponse[dict])
+def delete_district(id: int, current_user: User = Depends(crm_guard), db: Session = Depends(get_db)):
+    dist = db.query(District).filter(District.id == id).first()
+    if not dist:
+        raise HTTPException(status_code=404, detail="District not found")
+    db.delete(dist)
+    db.commit()
+    return ApiResponse(success=True, statusCode=200, message="District deleted", data={"deletedId": id})
+
+@router.delete("/locations/upazila/{id}", response_model=ApiResponse[dict])
+def delete_upazila(id: int, current_user: User = Depends(crm_guard), db: Session = Depends(get_db)):
+    up = db.query(Upazila).filter(Upazila.id == id).first()
+    if not up:
+        raise HTTPException(status_code=404, detail="Upazila not found")
+    db.delete(up)
+    db.commit()
+    return ApiResponse(success=True, statusCode=200, message="Upazila deleted", data={"deletedId": id})
+
+@router.delete("/locations/area/{id}", response_model=ApiResponse[dict])
+def delete_area(id: int, current_user: User = Depends(crm_guard), db: Session = Depends(get_db)):
+    ar = db.query(Area).filter(Area.id == id).first()
+    if not ar:
+        raise HTTPException(status_code=404, detail="Area not found")
+    db.delete(ar)
+    db.commit()
+    return ApiResponse(success=True, statusCode=200, message="Area deleted", data={"deletedId": id})
+
+# 8. Platform Invoices & Orders Management
+@router.get("/invoices", response_model=ApiResponse[List[dict]])
+def get_platform_invoices(
+    status: Optional[str] = Query(None),
+    vendor_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(crm_guard),
+    db: Session = Depends(get_db)
+):
+    q = db.query(Invoice)
+    if status:
+        q = q.filter(Invoice.status == status)
+    if vendor_id:
+        q = q.filter(Invoice.vendor_id == vendor_id)
+    if search:
+        q = q.filter(
+            (Invoice.id.ilike(f"%{search}%")) |
+            (Invoice.customer_name.ilike(f"%{search}%")) |
+            (Invoice.customer_phone.ilike(f"%{search}%")) |
+            (Invoice.vendor_shop_name.ilike(f"%{search}%"))
+        )
+
+    total = q.count()
+    invoices = q.order_by(Invoice.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+    result = [
+        {
+            "id": inv.id,
+            "customerName": inv.customer_name,
+            "customerPhone": inv.customer_phone,
+            "vendorShopName": inv.vendor_shop_name,
+            "vendorArea": inv.vendor_area,
+            "subtotal": inv.subtotal,
+            "discount": inv.discount,
+            "commissionAmount": inv.commission_amount,
+            "total": inv.total,
+            "status": inv.status,
+            "paymentMethod": inv.payment_method,
+            "createdAt": inv.created_at.isoformat() if inv.created_at else ""
+        }
+        for inv in invoices
+    ]
+    totalPages = (total + limit - 1) // limit
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Platform invoices fetched",
+        data=result,
+        meta=Meta(page=page, limit=limit, total=total, totalPages=totalPages)
+    )
+
+# 9. Voice Call Sessions & CTI Logs
+@router.get("/call-logs", response_model=ApiResponse[List[dict]])
+def get_crm_call_logs(
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(crm_guard),
+    db: Session = Depends(get_db)
+):
+    q = db.query(CallLog)
+    if status:
+        q = q.filter(CallLog.status == status)
+
+    total = q.count()
+    calls = q.order_by(CallLog.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+    result = [
+        {
+            "id": c.id,
+            "callerName": c.caller_name,
+            "callerPhone": c.caller_phone,
+            "callerRole": c.caller_role,
+            "receiverName": c.receiver_name,
+            "receiverPhone": c.receiver_phone,
+            "receiverShopName": c.receiver_shop_name,
+            "receiverArea": c.receiver_area,
+            "productName": c.product_name,
+            "status": c.status,
+            "durationSeconds": c.duration_seconds,
+            "invoiceId": c.invoice_id,
+            "createdAt": c.created_at.isoformat() if c.created_at else "",
+            "endedAt": c.ended_at.isoformat() if c.ended_at else None
+        }
+        for c in calls
+    ]
+    totalPages = (total + limit - 1) // limit
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="CRM call logs fetched",
+        data=result,
+        meta=Meta(page=page, limit=limit, total=total, totalPages=totalPages)
+    )
+
+# 10. Search Demand Intelligence
+@router.get("/search-demands", response_model=ApiResponse[List[dict]])
+def get_crm_search_demands(
+    area: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: User = Depends(crm_guard),
+    db: Session = Depends(get_db)
+):
+    q = db.query(SearchRequest)
+    if area:
+        q = q.filter(SearchRequest.area_name.ilike(f"%{area}%"))
+    if status:
+        q = q.filter(SearchRequest.status == status)
+
+    total = q.count()
+    demands = q.order_by(SearchRequest.created_at.desc()).offset((page - 1) * limit).limit(limit).all()
+
+    result = [
+        {
+            "id": d.id,
+            "query": d.query_text,
+            "area": d.area_name,
+            "upazila": d.upazila_name,
+            "district": d.district_name,
+            "division": d.division_name,
+            "customerPhone": d.customer_phone,
+            "status": d.status,
+            "createdAt": d.created_at.isoformat() if d.created_at else ""
+        }
+        for d in demands
+    ]
+    totalPages = (total + limit - 1) // limit
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Search demands fetched",
+        data=result,
+        meta=Meta(page=page, limit=limit, total=total, totalPages=totalPages)
+    )
+
+# 11. CRM Staff Management (Area Manager, CRM Operator, Finance)
+@router.get("/staff", response_model=ApiResponse[List[StaffResponse]])
+def get_crm_staff(
+    current_user: User = Depends(require_roles([UserRole.SUPER_ADMIN.value])),
+    db: Session = Depends(get_db)
+):
+    staff_roles = [UserRole.SUPER_ADMIN.value, UserRole.AREA_MANAGER.value, UserRole.CRM_OPERATOR.value, UserRole.FINANCE.value]
+    users = db.query(User).filter(User.role.in_(staff_roles)).order_by(User.created_at.desc()).all()
+
+    result = [
+        StaffResponse(
+            id=u.id,
+            name=u.name,
+            phone=u.phone,
+            email=u.email,
+            role=u.role,
+            status=u.status,
+            division=u.division_name,
+            district=u.district_name,
+            upazila=u.upazila_name,
+            area=u.area_name,
+            createdAt=u.created_at.isoformat() if u.created_at else ""
+        )
+        for u in users
+    ]
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="CRM staff list fetched",
+        data=result
+    )
+
+@router.post("/staff", response_model=ApiResponse[StaffResponse], status_code=201)
+def create_crm_staff(
+    request: CreateStaffRequest,
+    current_user: User = Depends(require_roles([UserRole.SUPER_ADMIN.value])),
+    db: Session = Depends(get_db)
+):
+    existing = db.query(User).filter(User.phone == request.phone).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Phone number is already registered")
+
+    valid_roles = [UserRole.AREA_MANAGER.value, UserRole.CRM_OPERATOR.value, UserRole.FINANCE.value, UserRole.SUPER_ADMIN.value]
+    if request.role not in valid_roles:
+        raise HTTPException(status_code=400, detail=f"Invalid staff role. Must be one of: {', '.join(valid_roles)}")
+
+    new_staff = User(
+        name=request.name,
+        phone=request.phone,
+        email=request.email,
+        password_hash=AuthService.hash_password(request.password),
+        role=request.role,
+        status="active",
+        division_name=request.division,
+        district_name=request.district,
+        upazila_name=request.upazila,
+        area_name=request.area
+    )
+    db.add(new_staff)
+    db.commit()
+    db.refresh(new_staff)
+
+    return ApiResponse(
+        success=True,
+        statusCode=201,
+        message=f"Staff member '{new_staff.name}' ({new_staff.role}) created successfully",
+        data=StaffResponse(
+            id=new_staff.id,
+            name=new_staff.name,
+            phone=new_staff.phone,
+            email=new_staff.email,
+            role=new_staff.role,
+            status=new_staff.status,
+            division=new_staff.division_name,
+            district=new_staff.district_name,
+            upazila=new_staff.upazila_name,
+            area=new_staff.area_name,
+            createdAt=new_staff.created_at.isoformat() if new_staff.created_at else ""
+        )
+    )
+

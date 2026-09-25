@@ -7,8 +7,10 @@ from app.models.category import Category
 from app.schemas.common import ApiResponse
 from app.schemas.auth import (
     LoginRequest, RegisterCustomerRequest, RegisterVendorRequest,
-    ProfileUpdateRequest, UserProfileResponse, AuthResponseData
+    ProfileUpdateRequest, UserProfileResponse, AuthResponseData,
+    RefreshTokenRequest, ChangePasswordRequest, ForgotPasswordRequest, ResetPasswordRequest
 )
+
 from app.services.auth_service import AuthService, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["Authentication & Profile"])
@@ -221,3 +223,104 @@ def update_profile(
         message="Profile updated successfully",
         data=build_profile_response(current_user, vendor)
     )
+
+@router.post("/refresh-token", response_model=ApiResponse[dict])
+def refresh_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
+    payload = AuthService.decode_token(request.refreshToken)
+    if payload.get("type") != "refresh":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid token type, refresh token required"
+        )
+    user_id = payload.get("sub")
+    user = db.query(User).filter(User.id == int(user_id)).first()
+    if not user or user.status == UserStatus.SUSPENDED.value:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or suspended"
+        )
+
+    new_token = AuthService.create_access_token({"sub": str(user.id), "role": user.role, "phone": user.phone})
+    new_refresh = AuthService.create_refresh_token({"sub": str(user.id)})
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Token refreshed successfully",
+        data={
+            "token": new_token,
+            "refreshToken": new_refresh
+        }
+    )
+
+@router.post("/change-password", response_model=ApiResponse[dict])
+def change_password(
+    request: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not AuthService.verify_password(request.oldPassword, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect"
+        )
+    
+    current_user.password_hash = AuthService.hash_password(request.newPassword)
+    db.commit()
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Password changed successfully",
+        data={"userId": current_user.id}
+    )
+
+@router.post("/forgot-password", response_model=ApiResponse[dict])
+def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.phone == request.phone).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account associated with this phone number"
+        )
+    # Simulated SMS OTP dispatch (e.g. 123456 in development/demo)
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Verification OTP sent to your phone number",
+        data={"phone": request.phone, "otpSent": True, "demoOtp": "123456"}
+    )
+
+@router.post("/reset-password", response_model=ApiResponse[dict])
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.phone == request.phone).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    if request.otp not in ["123456", "999999"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP"
+        )
+
+    user.password_hash = AuthService.hash_password(request.newPassword)
+    db.commit()
+
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Password reset successfully. You can now login with your new password.",
+        data={"phone": user.phone}
+    )
+
+@router.post("/logout", response_model=ApiResponse[dict])
+def logout(current_user: User = Depends(get_current_user)):
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Logged out successfully",
+        data={"loggedOut": True}
+    )
+

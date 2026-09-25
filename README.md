@@ -11,6 +11,8 @@
 - **Marketplace & Demand Intelligence**: Customer vendor discovery, catalog search, and unfulfilled demand stream alerts.
 - **Real-Time Voice Call & In-Call Order Session (CTI)**: Live cart synchronization (`call:cart_sync`) and call signaling via WebSockets (`/ws`).
 - **Web CRM 360° Management**: Analytics KPIs, Demand Heatmaps, Vendor 360, Customer 360, Support Tickets, and Payout Approvals.
+- **Media & File Uploads**: Multipart image/document uploads with static file hosting (`/uploads`).
+- **Complete Postman Collection**: Ready-to-import `postman_collection.json` included in repository.
 
 ---
 
@@ -54,6 +56,12 @@ The server will be available at:
 - **Interactive Swagger Docs**: `http://localhost:8000/docs`
 - **ReDoc Documentation**: `http://localhost:8000/redoc`
 - **WebSocket Gateway**: `ws://localhost:8000/ws`
+- **Media Uploads**: `http://localhost:8000/uploads`
+
+---
+
+## 📮 Postman Collection
+Import `express_crm_backend/postman_collection.json` into Postman for instant testing of all endpoints across Customer, Vendor, Admin, Invoices, Locations, Calls, and CRM modules.
 
 ---
 
@@ -67,10 +75,11 @@ The server will be available at:
 
 ---
 
-## 🧪 Running Automated Tests
+## 🧪 Running Automated Tests (24/24 Suites)
 
 ```bash
 cd express_crm_backend
 source venv/bin/activate
 python test_backend_full.py
 ```
+

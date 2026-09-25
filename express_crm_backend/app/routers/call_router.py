@@ -7,11 +7,31 @@ from app.models.user import User, UserRole
 from app.models.call_log import CallLog
 from app.models.invoice import Invoice
 from app.schemas.common import ApiResponse
-from app.schemas.call import CallInitiateRequest, CallInitiateResponse, CallEndRequest
+from app.schemas.call import CallInitiateRequest, CallInitiateResponse, CallEndRequest, CallCartSyncRequest, CallLogResponse
 from app.services.auth_service import get_current_user
 from app.services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/calls", tags=["Real-time Voice Call & CTI Sessions"])
+
+def format_call_response(c: CallLog) -> CallLogResponse:
+    return CallLogResponse(
+        id=c.id,
+        callerId=c.caller_id,
+        callerName=c.caller_name or "Caller",
+        callerPhone=c.caller_phone or "",
+        callerRole=c.caller_role or "customer",
+        receiverId=c.receiver_id,
+        receiverName=c.receiver_name or "Receiver",
+        receiverPhone=c.receiver_phone or "",
+        receiverShopName=c.receiver_shop_name,
+        receiverArea=c.receiver_area,
+        productName=c.product_name,
+        status=c.status,
+        durationSeconds=c.duration_seconds or 0,
+        invoiceId=c.invoice_id,
+        createdAt=c.created_at.isoformat() if c.created_at else "",
+        endedAt=c.ended_at.isoformat() if c.ended_at else None
+    )
 
 @router.post("/initiate", response_model=ApiResponse[CallInitiateResponse], status_code=201)
 async def initiate_call(
@@ -75,6 +95,55 @@ async def initiate_call(
         )
     )
 
+@router.post("/sync-cart", response_model=ApiResponse[dict])
+async def sync_cart_rest(
+    request: CallCartSyncRequest,
+    current_user: User = Depends(get_current_user)
+):
+    await ws_manager.broadcast_all("call:cart_sync", {
+        "callId": request.callId,
+        "items": request.items,
+        "syncedBy": current_user.name
+    })
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Cart synchronized successfully during call",
+        data={"callId": request.callId, "itemCount": len(request.items)}
+    )
+
+@router.get("/history", response_model=ApiResponse[list])
+def get_call_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    calls = db.query(CallLog).filter(
+        (CallLog.caller_id == current_user.id) |
+        (CallLog.receiver_id == current_user.id) |
+        (CallLog.caller_phone == current_user.phone) |
+        (CallLog.receiver_phone == current_user.phone)
+    ).order_by(CallLog.created_at.desc()).limit(50).all()
+
+    result = [format_call_response(c) for c in calls]
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Call history fetched",
+        data=result
+    )
+
+@router.get("/{call_id}", response_model=ApiResponse[CallLogResponse])
+def get_call_status(call_id: str, db: Session = Depends(get_db)):
+    call_log = db.query(CallLog).filter(CallLog.id == call_id).first()
+    if not call_log:
+        raise HTTPException(status_code=404, detail="Call log not found")
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Call session status fetched",
+        data=format_call_response(call_log)
+    )
+
 @router.post("/{call_id}/end", response_model=ApiResponse[dict])
 async def end_call(
     call_id: str,
@@ -111,3 +180,4 @@ async def end_call(
             "invoiceId": request.invoiceId
         }
     )
+
