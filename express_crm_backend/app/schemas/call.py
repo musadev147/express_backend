@@ -14,6 +14,15 @@ class CallInitiateResponse(BaseModel):
     callerPhone: str
     receiverPhone: str
     productName: Optional[str] = None
+    channelName: Optional[str] = None
+    agoraAppId: Optional[str] = None
+    agoraToken: Optional[str] = None
+
+class AgoraConfigResponse(BaseModel):
+    appId: str
+    token: str
+    channelName: str
+
 
 class CallEndRequest(BaseModel):
     durationSeconds: int = 0

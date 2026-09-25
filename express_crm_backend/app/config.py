@@ -28,8 +28,14 @@ class Settings(BaseSettings):
     
     # Media / Storage
     BASE_MEDIA_URL: str = "http://localhost:5000/media"
+    
+    # Agora Voice / Video Calling
+    AGORA_APP_ID: str = os.getenv("AGORA_APP_ID", "1f0289c692b4450fba150fafd95cd489")
+    AGORA_TEMP_TOKEN: str = os.getenv("AGORA_TEMP_TOKEN", "007eJxTYHiVaLSzTvLL3L8/VlqxiYk/VJxn5eGSkrbHe+U+k/vmwrkKDIZpBkYWlslmlkZJJiamBmlJiYZAMjEtxdI0OcXEwpJnw7ashkBGhqsCp1kZGSAQxGdnSK0oKEotLmZgAAB7PSAj")
+    AGORA_APP_CERTIFICATE: str = os.getenv("AGORA_APP_CERTIFICATE", "")
 
     class Config:
+
         env_file = ".env"
         extra = "allow"
 

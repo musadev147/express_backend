@@ -1,17 +1,21 @@
 import time
+from typing import Optional
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
+
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.user import User, UserRole
 from app.models.call_log import CallLog
 from app.models.invoice import Invoice
 from app.schemas.common import ApiResponse
-from app.schemas.call import CallInitiateRequest, CallInitiateResponse, CallEndRequest, CallCartSyncRequest, CallLogResponse
-from app.services.auth_service import get_current_user
+from app.config import settings
+from app.schemas.call import CallInitiateRequest, CallInitiateResponse, CallEndRequest, CallCartSyncRequest, CallLogResponse, AgoraConfigResponse
+from app.services.auth_service import get_current_user, get_optional_user
 from app.services.websocket_manager import ws_manager
 
 router = APIRouter(prefix="/calls", tags=["Real-time Voice Call & CTI Sessions"])
+
 
 def format_call_response(c: CallLog) -> CallLogResponse:
     return CallLogResponse(
@@ -77,7 +81,10 @@ async def initiate_call(
         "callerId": current_user.id,
         "callerName": current_user.name,
         "callerPhone": current_user.phone,
-        "productName": request.productName
+        "productName": request.productName,
+        "channelName": call_id,
+        "agoraAppId": settings.AGORA_APP_ID,
+        "agoraToken": settings.AGORA_TEMP_TOKEN
     }
     await ws_manager.broadcast_to_room(f"room:vendor:{receiver.id}", "call:incoming", payload)
     await ws_manager.broadcast_to_room(f"room:customer:{receiver.id}", "call:incoming", payload)
@@ -91,11 +98,28 @@ async def initiate_call(
             status="dialing",
             callerPhone=current_user.phone,
             receiverPhone=request.receiverPhone,
-            productName=request.productName
+            productName=request.productName,
+            channelName=call_id,
+            agoraAppId=settings.AGORA_APP_ID,
+            agoraToken=settings.AGORA_TEMP_TOKEN
+        )
+    )
+
+@router.get("/agora-config", response_model=ApiResponse[AgoraConfigResponse])
+def get_agora_config(channelName: Optional[str] = "express_call"):
+    return ApiResponse(
+        success=True,
+        statusCode=200,
+        message="Agora RTC configuration fetched",
+        data=AgoraConfigResponse(
+            appId=settings.AGORA_APP_ID,
+            token=settings.AGORA_TEMP_TOKEN,
+            channelName=channelName or "express_call"
         )
     )
 
 @router.post("/sync-cart", response_model=ApiResponse[dict])
+
 async def sync_cart_rest(
     request: CallCartSyncRequest,
     current_user: User = Depends(get_current_user)
